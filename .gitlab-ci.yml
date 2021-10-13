@@ -1,0 +1,50 @@
+cache:
+  paths:
+    - node_modules
+stages:
+  - build
+#  - test
+  - deploy
+install_dependencies:
+  image: node
+  stage: build
+  script:
+    # Create .env from $ENV_FILE gitlab file
+    - cp "$ENV_FILE" "$(pwd)/.env"
+    - npm install
+    - CI=false npm run build
+  artifacts:
+    expire_in: 1 week
+    paths:
+      - build/
+  only:
+    - master
+#unit_test:
+#  stage: test
+#  script:
+#    - npm react-scripts test
+#  except:
+#    variables:
+#      - $CI_COMMIT_MESSAGE =~ /\[skip[ _-]test?\]/i
+deploy_production:
+  image: python
+  stage: deploy
+  when: manual
+  script:
+    - pip3 install awscli --upgrade # AWS CLI installation
+    - aws s3 sync build/ $AWS_S3_LOCATION --acl public-read # Uploads the zip file to S3
+    - aws cloudfront create-invalidation --distribution-id $CLOUDFRONT_ID --paths '/*' #Invalidate cache
+    - >
+      curl -X POST "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONEID/purge_cache"
+      -H "X-Auth-Email: $CLOUDFLARE_EMAIL"
+      -H "X-Auth-Key: $CLOUDFLARE_KEY"
+      -H 'Content-Type: application/json'
+      --data '{"files":["https://vianhubs.com"]}'
+  environment:
+    name: production
+    url: https://vianhubs.com
+  only:
+    - master
+  except:
+    variables:
+      - $CI_COMMIT_MESSAGE =~ /\[skip[ _-]deploy?\]/i

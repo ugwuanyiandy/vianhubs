@@ -1,0 +1,1 @@
+# React project template with redux
